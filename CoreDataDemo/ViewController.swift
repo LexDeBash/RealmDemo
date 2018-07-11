@@ -7,16 +7,24 @@
 //
 
 import UIKit
+import RealmSwift
+
+class TasksList: Object {
+    @objc dynamic var task = ""
+    @objc dynamic var completed = false
+}
 
 class ViewController: UITableViewController {
     
-    var itemsArray = [String]() // Массив для хранения записей
+    let realm = try! Realm() // Доступ к хранилищу
+    var items: Results<TasksList>! //Контейнер со свойствами объекта TaskList
+    
     var cellId = "Cell" // Идентификатор ячейки
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Цвет заливки вью контроллера
+        // Цвет заливки вью
         view.backgroundColor = .white
         
         // Цвет навигейшин бара
@@ -32,53 +40,88 @@ class ViewController: UITableViewController {
                                                             style: .plain,
                                                             target: self,
                                                             action: #selector(addItem)) // Вызов метода для кнопки
+        
         // Присваиваем ячейку для TableView с иднетифиактором "Cell"
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: cellId)
+        
+        items = realm.objects(TasksList.self)
     }
     
     // Действие при нажатии на кнопку "Добавить"
     @objc func addItem(_ sender: AnyObject) {
         
+        addAlertForNewItem()
+    }
+    
+    func addAlertForNewItem() {
+        
         // Создание алёрт контроллера
         let alert = UIAlertController(title: "Новая задача", message: "Пожалуйста заполните поле", preferredStyle: .alert)
+        
+        // Создание текстового поля
+        var alertTextField: UITextField!
+        alert.addTextField { textField in
+            alertTextField = textField
+            textField.placeholder = "Новая задача"
+        }
         
         // Создание кнопки для сохранения новых значений
         let saveAction = UIAlertAction(title: "Сохранить", style: .default) { action in
             
             // Проверяем не является ли текстовое поле пустым
-            guard alert.textFields?.first?.text?.isEmpty == false else {
-                print("The text field is empty") // Выводим сообщение на консоль, если поле не заполнено
-                return
+            guard let text = alertTextField.text , !text.isEmpty else { return }
+            
+            let task = TasksList()
+            task.task = text
+            
+            try! self.realm.write {
+                self.realm.add(task)
             }
             
-            // Добавляем в массив новую задачу из текстового поля
-            self.itemsArray.append((alert.textFields?.first?.text)!)
-            
-            // Обновляем таблицу
-            self.tableView.reloadData()
+            // Обновление таблицы
+            self.tableView.insertRows(at: [IndexPath.init(row: self.items.count-1, section: 0)], with: .automatic)
         }
         
         // Создаем кнопку для отмены ввода новой задачи
         let cancelAction = UIAlertAction(title: "Отмена", style: .destructive, handler: nil)
         
-        alert.addTextField(configurationHandler: nil) // Присваиваем алёрту текстовое поле
         alert.addAction(saveAction) // Присваиваем алёрту кнопку для сохранения результата
         alert.addAction(cancelAction) // Присваиваем алерут кнопку для отмены ввода новой задачи
         
         present(alert, animated: true, completion: nil) // Вызываем алёрт контроллер
     }
     
+    //MARK: Table View Data Source
+    
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return itemsArray.count
+        if items.count != 0 {
+            return items.count
+        }
+        return 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: cellId, for: indexPath)
-        let item = itemsArray[indexPath.row]
-        cell.textLabel?.text = item
+        let item = items[indexPath.row]
+        cell.textLabel?.text = item.task
         return cell
     }
-
-
+    
+    //MARK: Table View Delegate
+    
+    override func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath) -> [UITableViewRowAction]? {
+        
+        let editingRow = items[indexPath.row]
+                
+        let deleteAction = UITableViewRowAction(style: .default, title: "Delete") { _,_ in
+            try! self.realm.write {
+                self.realm.delete(editingRow)
+                tableView.reloadData()
+            }
+            
+        }
+        
+        return [deleteAction]
+    }
 }
 
